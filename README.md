@@ -270,7 +270,10 @@ Install php on todo server
 
  **Verify Composer is installed or not**
 
-``` composer --version```
+``` 
+composer --version
+
+```
 
 **Install phpunit, phploc**
 =====================================
@@ -309,4 +312,171 @@ Here you would see a step by step process on how to configure Jenkins and ansibl
 
 - Spin up your EC2 instance with RedHat Linux distro and ensure you install git
 
-```sudo yum install git```
+```
+sudo yum install git
+```
+and then clone the repository from Github
+
+```
+git clone [repo-link](https://github.com/Goddhi/ansible-config-mgt)
+
+```
+
+- Install Jenkins
+
+```
+sudo wget -O /etc/yum.repos.d/jenkins.repo \
+    https://pkg.jenkins.io/redhat-stable/jenkins.repo
+sudo rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io.key
+sudo yum upgrade
+# Add required dependencies for the jenkins package
+sudo yum install java-11-openjdk
+sudo yum install jenkins
+sudo systemctl daemon-reload
+```
+- To start Jenkins, run the following command:
+
+```
+sudo systemctl start jenkins
+sudo systemctl enable jenkins
+sudo systemctl status jenkins
+```
+- To access Jenkins, open a web browser and enter the public IP address of your EC2 instance, followed by :8080. Note: If you are using a security group, make sure you have port 8080 open.
+
+- To get the initial password, run the following command:
+
+ ```
+ sudo cat /var/lib/jenkins/secrets/initialAdminPassword
+ ```
+ paste the initial password in the browser and click continue
+
+- Install the suggested plugins and create your first admin user
+
+- Once your are done with the initial setup, you will be redirected to the Jenkins dashboard. Click on Manage Jenkins and then click on Manage Plugins. Click on the available tab and search for blue ocean. Install the blue ocean plugin and install without restart.
+
+Result:
+![bluen-ocean-image](blue-ocean-img.png)
+
+- Now go to dashboard and click on "Open Blue Ocean" and then click on "Create a new pipeline"
+
+
+- Select Github and click on "Github" and enter your github access token and click on "Connect" and then select the repository you want to use for your project and click on "Create Pipeline"
+
+- Inside the code repository in your EC2 instance, create a folder and name it 'deploy' and inside deploy create a jenkinsfile and paste the code below
+
+```
+pipeline {
+    agent any
+
+    stages {
+        stage('Build') {
+            steps {
+                script {
+                    sh 'echo "Building stage"'
+                }
+            }
+        }
+    }
+}
+```
+- Now push the code to your github repository and go back to your jenkins dashboard and click on "ansible config mgt" and then click on configure.
+
+Here we are trying to tell jenkins the path to our build configuration file which is in the 'deploy/' folder. So we will add the path to the jenkinsfile in the "Build Configuaration" section and click on "Save"
+
+- Once you have saved the configuration, the build would automatically start and you can open blue ocean to see the build process.
+
+Note: You notice that this pipeline is a multibranch one. This means, if there were more than one branch in Github. Jenkins would scan all branches and trigger a build for each branch.
+
+- To see the multibranch pipeline in effect,
+
+  - create a new branch and name it 'feature/jenkinspipeline-stages'
+
+```
+git checkout -b feature/jenkinspipeline-stages
+```
+  - At the moment we only have the build stage in our jenkinsfile. So we will add the other stages to our jenkinsfile and push the code to github.
+
+```
+ stage('Test') {
+  steps {
+    script {
+      sh 'echo "Testing Stage"'
+    }
+  }
+}
+```
+
+- To make your new branch show up in Jenkins, we need to tell Jenkins to scan the repository. Click on the "Administration button" and navigate to the "Ansible Config Mgt" project and click on "Scan repository now". Refresh the page and both branches will start building automatically. You can go into Blue Ocean to see both branches there too.
+
+- In Blue Ocean, you can now see how the Jenkinsfile has caused a new step in the pipeline launch build for the new branch.
+
+- Let's create a pull request to merge the latest code into the main branch. After merging the pull request, go back into the main branch and pull the latest change.
+
+- Create a new branch, add more stages into the Jenkins file to simulate below phases. (Just add an echo command like we have in build and test stages)
+  i. Package
+  ii. Deploy
+  iii. Clean up
+
+```
+pipeline {
+    agent any
+
+    stages {
+        stage('Initial Cleanup') {
+            steps {
+                dir("${WORKSPACE}") {
+                    deleteDir()
+                }
+            }
+        }
+
+        stage('Build') {
+            steps {
+                script {
+                    sh 'echo "Building stage"'
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                script {
+                    sh 'echo "Testing Stage" '
+                }
+            }
+        }
+
+        stage('Package') {
+            steps {
+                script {
+                    sh 'echo "Packaging Stage"'
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                script {
+                    sh 'echo "Deployment Stage"'
+                }
+            }
+        }
+
+        stage('Final Clean Up') {
+            steps {
+                cleanWs()
+                
+            }
+        }
+    }
+}
+
+```
+- Verify in Blue Ocean that all the stages are working, then merge your feature branch to the main branch
+
+
+
+
+
+
+
