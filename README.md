@@ -134,9 +134,24 @@ What we want to achieve, is having Nginx to serve as a reverse proxy for our sit
 
 We should have a subdomains list like this:
 
+| Server      | Domain |
+| ----------- | ----------- |
+| Jenkins      | Title       |
+| Sonarqube   | Text        |
 | Syntax      | Description |
 | ----------- | ----------- |
 | Header      | Title       |
 | Paragraph   | Text        |
-
+| Syntax      | Description |
+| ----------- | ----------- |
+| Header      | Title       |
+| Paragraph   | Text        |
+| Syntax      | Description |
+| ----------- | ----------- |
+| Header      | Title       |
+| Paragraph   | Text        |
+| Syntax      | Description |
+| ----------- | ----------- |
+| Header      | Title       |
+| Paragraph   | Text        |
 
