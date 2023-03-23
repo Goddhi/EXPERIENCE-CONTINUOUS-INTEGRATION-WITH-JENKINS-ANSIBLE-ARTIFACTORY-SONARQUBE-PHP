@@ -1085,7 +1085,7 @@ Note: the goal of jenkins slave is to shed load from the jenkins server to the s
 
 - Then add the url of the jenkins server
 
-### Github webshooks
+### Github webhooks
 
 ```
 http://<Jenkins-Server-IP-address>:8080/github-webhook/
