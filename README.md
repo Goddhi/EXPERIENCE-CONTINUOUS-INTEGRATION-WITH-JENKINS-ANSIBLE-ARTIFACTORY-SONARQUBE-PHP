@@ -998,7 +998,7 @@ There is a very wide discussion around release strategy, and git branching strat
   - First, we will include a When condition to run Quality Gate whenever the running branch is either develop, hotfix, release, main, or master
   - Then we add a timeout step to wait for SonarQube to complete analysis and successfully finish the pipeline only when code quality is acceptable.
 
-  ```
+```
   stage('SonarQube Quality Gate') {
       when { branch pattern: "^develop*|^hotfix*|^release*|^main*", comparator: "REGEXP"}
         environment {
@@ -1015,6 +1015,7 @@ There is a very wide discussion around release strategy, and git branching strat
     }
 
 ```
+
 To test, create different branches and push to GitHub. You will realise that only branches other than develop, hotfix, release, main, or master will be able to deploy the code.
 
 If everything goes well, you should be able to see something like this:
@@ -1053,9 +1054,9 @@ and rerun the pipeline and you should get this
 - Then open the .bash_profile file and add the following lines
 
 ```
-<!-- export JAVA_HOME=$(dirname $(dirname $(readlink $(readlink $(which javac)))))
+export JAVA_HOME=$(dirname $(dirname $(readlink $(readlink $(which javac)))))
 export PATH=$PATH:$JAVA_HOME/bin
-export CLASSPATH=.:$JAVA_HOME/jre/lib:$JAVA_HOME/lib:$JAVA_HOME/lib/tools.jar -->
+export CLASSPATH=.:$JAVA_HOME/jre/lib:$JAVA_HOME/lib:$JAVA_HOME/lib/tools.jar
 
 ```
 - Then source the file
