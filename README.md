@@ -136,22 +136,20 @@ We should have a subdomains list like this:
 
 | Server      | Domain |
 | ----------- | ----------- |
-| Jenkins      | Title       |
-| Sonarqube   | Text        |
-| Syntax      | Description |
-| ----------- | ----------- |
-| Header      | Title       |
-| Paragraph   | Text        |
-| Syntax      | Description |
-| ----------- | ----------- |
-| Header      | Title       |
-| Paragraph   | Text        |
-| Syntax      | Description |
-| ----------- | ----------- |
-| Header      | Title       |
-| Paragraph   | Text        |
-| Syntax      | Description |
-| ----------- | ----------- |
-| Header      | Title       |
-| Paragraph   | Text        |
+| Jenkins      | https://ci.infradev.test.io       |
+| Sonarqube   | https://sonar.infradev.test.io        |
+| Artifactory | https://artifactory.infradev.test.io |
+| Production tooling	      | https://tooling.test.io |
+| Pre-production tooling | https://tooling.preprod.test.io|
+| Pentest tooling	      | https://tooling.pentest.test.io       |
+| UAT tooling	   | https://tooling.uat.test.io        |
+| SIT tooling	      | https://tooling.sit.test.io |
+|  Development tooling	| https://tooling.dev.test.io |
+| Production TODO-webapp	      | https://todo.test.io       |
+| Pre-production TODO-webapp	   | https://todo.preprod.test.io        |
+| Pentest TODO-webapp   | https://todo.pentest.test.io |
+|  UAT TODO-webapp	| https://todo.uat.test.io |
+| SIT TODO-webapp	      | https://todo.sit.test.io       |
+| Development TODO-webapp	   | https://todo.dev.test.io        |
+
 
