@@ -474,6 +474,341 @@ pipeline {
 ```
 - Verify in Blue Ocean that all the stages are working, then merge your feature branch to the main branch
 
+Result:
+
+![verify-blue-ocean](verify-blue-ocean.png)
+
+Eventually, your main branch should have a successful pipeline like this in blue ocean
+
+### Running Ansible Playbook from Jenkins
+
+- Install Ansible in your EC2 instance
+
+```
+sudo yum install ansible
+```
+- Install the Ansible plugin in Jenkins
+- Go to Jenkins dashboard and click on "Manage Jenkins" and then click on "Manage Plugins"
+- Click on the available tab and search for ansible. Install the ansible plugin and install without restart.
+
+- Creating Jenkinsfile from scratch. (Delete all you currently have in there and start all over to get Ansible to run successfully)
+
+Note: Jenkins needs to export the ANSIBLE_CONFIG environment variable. You can put the .ansible.cfg file alongside Jenkinsfile in the deploy directory. This way, anyone can easily identify that everything in there relates to deployment. Then, using the Pipeline Syntax tool in Ansible, generate the syntax to create environment variables to set.
+
+### Parameterizing Jenkinsfile for Ansible Deployment. 
+To deploy to other environments, we will need to use parameters. But for the purpose of this we would just run our playbook against the development environment.
+
+  - Create two new instances
+     - Nginx - Redhat 8
+     - DB - ubuntu
+
+- Delete the details in the existing jenkinsfile and update it to run against the dev environment also create a file called ansible.cfg as this would contain our ansible configuration settings
+
+
+for the ansible.cfg file, add the following code
+
+```
+[defaults]
+timeout = 160
+callback_whitelist = profile_tasks
+log_path=~/ansible.log
+host_key_checking = False
+gathering = smart
+ansible_python_interpreter=/usr/bin/python3
+allow_world_readable_tmpfiles=true
+
+
+[ssh_connection]
+ssh_args = -o ControlMaster=auto -o ControlPersist=30m -o ControlPath=/tmp/ansible-ssh-%h-%p-%r -o ServerAliveInterval=60 -o ServerAliveCountMax=60 -o ForwardAgent=yes
+```
+```
+pipeline {
+    agent any
+
+    environment {
+        ANSIBLE_CONFIG="${WORKSPACE}/deploy/ansible.cfg"
+    }
+
+    parameters {
+      string(name: 'inventory', defaultValue: 'dev',  description: 'This is the inventory file for the environment to deploy configuration')
+    }
+
+    stages{
+        stage("Initial cleanup") {
+            steps {
+                dir("${WORKSPACE}") {
+                deleteDir()
+                }
+            }
+        }
+
+        stage('Checkout SCM') {
+            steps{
+                git branch: 'main', url: 'https://github.com/Goddhi/Ansible-Config-MGT2'
+            }
+        }
+
+        stage('Prepare Ansible For Execution') {
+            steps {
+                sh 'echo ${WORKSPACE}' 
+                sh 'sed -i "3 a roles_path=${WORKSPACE}/roles" ${WORKSPACE}/deploy/ansible.cfg'  
+            }
+        }
+
+        stage('Run Ansible playbook') {
+            steps {
+                ansiblePlaybook colorized: true, credentialsId: 'private-key', disableHostKeyChecking: true, installation: 'ansible', inventory: 'inventory/dev.yml', playbook: 'playbooks/site.yml'
+            }
+        }
+
+        stage('Clean Workspace after build'){
+            steps{
+                cleanWs(cleanWhenAborted: true, cleanWhenFailure: true, cleanWhenNotBuilt: true, cleanWhenUnstable: true, deleteDirs: true)
+            }
+        }
+    }
+}
+
+```
+- Note: To generate the ansible playbook syntax, click on "Pipeline Syntax" and then click on "Snippet Generator" and then select "Ansible Playbook" and then click on "Generate Pipeline Script" and then copy the code and paste it into your Jenkinsfile.
+
+
+- Navigate to "Manage Jenkins" and click on "Manage Credentials" and click on global and click on "Add Credentials" and add your private key. (This is the private key you used to create your instances)
+
+Result:
+
+![pipeline-syntax](pipeline-syntax.png)
+- Navigate back to the "Dashboard" and click on "Manage Jenkins" and then on "Global Tool Configuration" and then scroll down to "Ansible" and click on "Add Ansible" and add the path to the ansible executable. (This is the path to the ansible executable on your EC2 instance) in this case the file path is /usr/bin and then click on "Apply" and then "Save"
+
+Result:
+
+![ansible-file-path](ansible-jenkins.png)
+ 
+ Now you can commit your changes and push to the main branch and then run the pipeline.
+
+![pipeline-complete](pipeline-complete.png)
+### CI/CD Pipeline for Todo Application
+
+Here we will introduce another PHP application to add to the list of software products we are managing in our infrastructure. The good thing with this particular application is that it has unit tests, and it is an ideal application to show an end-to-end CI/CD pipeline for a particular application.
+
+The goal here is to deploy the application onto servers directly from Artifactory rather than from git. If you have not updated Ansible with an Artifactory role, simply use this guide to create an Ansible role for Artifactory (ignore the Nginx part).
+
+#### Prepare Jenkins
+- Fork the repository from [here](https://github.com/Goddhi/php-todo) to your github account.
+
+- On your Jenkins server, install PHP, its dependencies and Composer tool. You can use the following commands to install PHP and its dependencies
+
+```
+sudo apt install -y zip libapache2-mod-php phploc php-{xml,bcmath,bz2,intl,gd,mbstring,mysql,zip}
+```
+#### Integrate Artifactory with Jenkins
+
+- Install Jenkins Plugins
+
+    - Plot plugin
+    - Artifactory plugin
+
+We will use plot plugin to display tests reports, and code coverage information.
+
+The Artifactory plugin will be used to easily upload code artifacts into an Artifactory server.
+
+#### Install composer
+
+```
+curl -sS https://getcomposer.org/installer | php
+sudo mv composer.phar /usr/bin/composer
+
+```
+  - Launch a new Instance for Artifactory
+
+- Redhat 9
+- t2.medium
+- 4GB RAM
+- 10GB minimum Storage
+
+We would be using ansible roles to install artifactory on the instance we just created. The roles are located in the ansible-config-mgt repository. So we need to update the 'ci' inventory with the artifactory private address and then commit and push the changes to the main branch.
+
+  - Then we run the ansible playbook to run against the 'ci' inventory and install artifactory on the instance we just created.
+
+Result:
+
+![ansible-ci-environment](ansible-ci.png)
+
+- Ensure you have port '8082' open in the security group of the artifactory instance.
+
+- Now open jfrog artifactory on your browser and login with the default credentials (admin:password)
+
+- Create a new local repository called 'PBL' and select the type as 'Generic' and then click on 'Create'
+
+Result:
+
+![artifactory-img](artifactory-img.png)
+
+- To configure our artifactory server in Jenkins, we need to do the following:
+- Go to "Manage Jenkins" and then click on "Configure System"
+- Scroll down to "Artifactory" and click on "Add Artifactory  Server" and add the following details
+- Name: artifactory
+- URL: http://artifactory:8081/artifactory
+- Credentials: Add credentials and add your artifactory username and password
+- Ensure you test connection and it is successful
+- Click on "Apply" and then "Save"
+
+Results:
+
+![jfrog-credentials](jfrog-credentials.png)
+
+- Now we need to create a jenkinsfile inside the php-todo repository. The jenkinsfile will contain the following code:
+
+```
+pipeline {
+    agent any
+
+    stages {
+
+    stage("Initial cleanup") {
+        steps {
+        dir("${WORKSPACE}") {
+            deleteDir()
+        }
+        }
+    }
+
+    stage('Checkout SCM') {
+        steps {
+            git branch: 'main', url: 'https://github.com/manny-uncharted/php-todo.git'
+        }
+    }
+
+    stage('Prepare Dependencies') {
+      steps {
+             sh 'mv .env.sample .env'
+             sh 'composer install'
+             sh 'php artisan migrate'
+             sh 'php artisan db:seed'
+             sh 'php artisan key:generate'
+      }
+    }
+  }
+}
+```
+
+- Before we execute the pipeline, we need to create a database and a user
+
+```
+Create database homestead;
+CREATE USER 'homestead'@'%' IDENTIFIED BY 'sePret^i';
+GRANT ALL PRIVILEGES ON * . * TO 'homestead'@'%';
+```
+But instead of logging into the database server, we can use the mysql ansible role to create the database and user. So we need to update the 'ci' inventory with the database server private address and then commit and push the changes to the main branch.
+
+```
+mysql_databases:
+  - name: homestead
+    collation: utf8_general_ci
+    encoding: utf8
+    replicate: 1
+
+mysql_users:
+  - name: homestead
+    host: <private-ip-address-of-your-jenkins-server>
+    password: sePret^i
+    priv: '*.*:ALL,GRANT'
+
+```
+
+
+- Then we run the ansible playbook to run against the 'dev.yml' inventory and create the database and user.
+
+
+![pipeline-against-dev](pipeline-complete.png)
+
+- Now let's commit the Jenkinsfile created in our php-todo repository and push to the main branch. Then we can create a new pipeline and select the php-todo repository and then configure it to find the jenkinsfile and build the pipeline.
+
+Note: When running the initial build process you might run into an error like this:
+
+[php-loc-error](php-loc-error.png)
+
+To fix this:
+
+- Install mysql-client on your jenkins server
+
+```
+sudo apt install mysql-client
+```
+- ssh into the mysql server and edit the configuration file
+
+```
+sudo nano /etc/mysql/mysql.conf.d/mysqld.cnf
+```
+edit the bind address to
+
+```
+bind-address = 0.0.0.0
+```
+
+and then restart the mysql service
+
+```
+sudo systemctl restart mysql
+sudo systemctl status mysql
+```
+- In the php-todo repository, edit the .env file and change the following details
+
+```
+DB_HOST=172.31.31.234
+DB_CONNECTION=mysql
+DB_PORT=3306
+```
+and then commit and push the changes to the main branch.
+
+- Update the Jenkinsfile to include Unit tests step
+
+```
+stage('Execute Unit Tests') {
+    steps {
+        sh './vendor/bin/phpunit'
+    }
+}
+```
+### Code Quality Analysis
+
+This is one of the areas where developers, architects and many stakeholders are mostly interested in as far as product development is concerned. As a DevOps engineer, you also have a role to play. Especially when it comes to setting up the tools.
+
+For PHP the most commonly tool used for code quality analysis is phploc. [Read more here](https://matthiasnoback.nl/2019/09/using-phploc-for-quick-code-quality-estimation-part-1/)
+
+The data produced by phploc can be ploted onto graphs in Jenkins.
+
+- Add the code analysis step in jenkinsfile. The output of the data will be saved in 'build/logs/phploc.csv' file.
+
+```
+stage('Code Analysis') {
+    steps {
+        sh 'phploc app/ --log-csv build/logs/phploc.csv'
+    }
+}
+```
+- Plot the data using plot Jenkins plugin. This plugin provides generic plotting (or graphing) capabilities in Jenkins. It will plot one or more single values variations across builds in one or more plots. Plots for a particular job (or project) are configured in the job configuration screen, where each field has additional help information. Each plot can have one or more lines (called data series). After each build completes the plots’ data series latest values are pulled from the CSV file generated by phploc.
+
+```
+stage('Plot Code Coverage Report') {
+    steps {
+        plot csvFileName: 'plot-396c4a6b-b573-41e5-85d8-73613b2ffffb.csv', csvSeries: [[displayTableFlag: false, exclusionValues: 'Lines of Code (LOC),Comment Lines of Code (CLOC),Non-Comment Lines of Code (NCLOC),Logical Lines of Code (LLOC)                          ', file: 'build/logs/phploc.csv', inclusionFlag: 'INCLUDE_BY_STRING', url: '']], group: 'phploc', numBuilds: '100', style: 'line', title: 'A - Lines of code', yaxis: 'Lines of Code'
+        plot csvFileName: 'plot-396c4a6b-b573-41e5-85d8-73613b2ffffb.csv', csvSeries: [[displayTableFlag: false, exclusionValues: 'Directories,Files,Namespaces', file: 'build/logs/phploc.csv', inclusionFlag: 'INCLUDE_BY_STRING', url: '']], group: 'phploc', numBuilds: '100', style: 'line', title: 'B - Structures Containers', yaxis: 'Count'
+        plot csvFileName: 'plot-396c4a6b-b573-41e5-85d8-73613b2ffffb.csv', csvSeries: [[displayTableFlag: false, exclusionValues: 'Average Class Length (LLOC),Average Method Length (LLOC),Average Function Length (LLOC)', file: 'build/logs/phploc.csv', inclusionFlag: 'INCLUDE_BY_STRING', url: '']], group: 'phploc', numBuilds: '100', style: 'line', title: 'C - Average Length', yaxis: 'Average Lines of Code'
+        plot csvFileName: 'plot-396c4a6b-b573-41e5-85d8-73613b2ffffb.csv', csvSeries: [[displayTableFlag: false, exclusionValues: 'Cyclomatic Complexity / Lines of Code,Cyclomatic Complexity / Number of Methods ', file: 'build/logs/phploc.csv', inclusionFlag: 'INCLUDE_BY_STRING', url: '']], group: 'phploc', numBuilds: '100', style: 'line', title: 'D - Relative Cyclomatic Complexity', yaxis: 'Cyclomatic Complexity by Structure'      
+        plot csvFileName: 'plot-396c4a6b-b573-41e5-85d8-73613b2ffffb.csv', csvSeries: [[displayTableFlag: false, exclusionValues: 'Classes,Abstract Classes,Concrete Classes', file: 'build/logs/phploc.csv', inclusionFlag: 'INCLUDE_BY_STRING', url: '']], group: 'phploc', numBuilds: '100', style: 'line', title: 'E - Types of Classes', yaxis: 'Count'
+        plot csvFileName: 'plot-396c4a6b-b573-41e5-85d8-73613b2ffffb.csv', csvSeries: [[displayTableFlag: false, exclusionValues: 'Methods,Non-Static Methods,Static Methods,Public Methods,Non-Public Methods', file: 'build/logs/phploc.csv', inclusionFlag: 'INCLUDE_BY_STRING', url: '']], group: 'phploc', numBuilds: '100', style: 'line', title: 'F - Types of Methods', yaxis: 'Count'
+        plot csvFileName: 'plot-396c4a6b-b573-41e5-85d8-73613b2ffffb.csv', csvSeries: [[displayTableFlag: false, exclusionValues: 'Constants,Global Constants,Class Constants', file: 'build/logs/phploc.csv', inclusionFlag: 'INCLUDE_BY_STRING', url: '']], group: 'phploc', numBuilds: '100', style: 'line', title: 'G - Types of Constants', yaxis: 'Count'
+        plot csvFileName: 'plot-396c4a6b-b573-41e5-85d8-73613b2ffffb.csv', csvSeries: [[displayTableFlag: false, exclusionValues: 'Test Classes,Test Methods', file: 'build/logs/phploc.csv', inclusionFlag: 'INCLUDE_BY_STRING', url: '']], group: 'phploc', numBuilds: '100', style: 'line', title: 'I - Testing', yaxis: 'Count'
+        plot csvFileName: 'plot-396c4a6b-b573-41e5-85d8-73613b2ffffb.csv', csvSeries: [[displayTableFlag: false, exclusionValues: 'Logical Lines of Code (LLOC),Classes Length (LLOC),Functions Length (LLOC),LLOC outside functions or classes ', file: 'build/logs/phploc.csv', inclusionFlag: 'INCLUDE_BY_STRING', url: '']], group: 'phploc', numBuilds: '100', style: 'line', title: 'AB - Code Structure by Logical Lines of Code', yaxis: 'Logical Lines of Code'
+        plot csvFileName: 'plot-396c4a6b-b573-41e5-85d8-73613b2ffffb.csv', csvSeries: [[displayTableFlag: false, exclusionValues: 'Functions,Named Functions,Anonymous Functions', file: 'build/logs/phploc.csv', inclusionFlag: 'INCLUDE_BY_STRING', url: '']], group: 'phploc', numBuilds: '100', style: 'line', title: 'H - Types of Functions', yaxis: 'Count'
+        plot csvFileName: 'plot-396c4a6b-b573-41e5-85d8-73613b2ffffb.csv', csvSeries: [[displayTableFlag: false, exclusionValues: 'Interfaces,Traits,Classes,Methods,Functions,Constants', file: 'build/logs/phploc.csv', inclusionFlag: 'INCLUDE_BY_STRING', url: '']], group: 'phploc', numBuilds: '100', style: 'line', title: 'BB - Structure Objects', yaxis: 'Count'
+    }
+}
+```
+- Now push the code to the repository and trigger the build. You should now see a Plot menu item on the left menu. Click on it to see the charts. (The analytics may not mean much to you as it is meant to be read by developers. So, you need not worry much about it – this is just to give you an idea of the real-world implementation). result:
+
+Result:
 
 
 
