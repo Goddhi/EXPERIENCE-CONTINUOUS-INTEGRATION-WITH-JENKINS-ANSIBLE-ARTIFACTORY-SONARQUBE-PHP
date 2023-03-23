@@ -152,4 +152,161 @@ We should have a subdomains list like this:
 | SIT TODO-webapp	      | https://todo.sit.test.io       |
 | Development TODO-webapp	   | https://todo.dev.test.io        |
 
+### Ansible Inventory
 
+Our Ansible inventory folder should look like this:
+
+```
+├── ci
+├── dev
+├── pentest
+├── pre-prod
+├── prod
+├── sit
+└── uat
+```
+**Inventory files**
+
+Our ansible inventory files for each environment should look like this:
+
+**CI Environment Inventory File**
+
+Create an inventory file for the CI environment. This will be used to access Jenkins, Nginx, Artifact Repository and Sonarqube. The inventory file should look like this:
+
+```
+[jenkins]
+<Jenkins-Private-IP-Address>
+
+[nginx]
+<Nginx-Private-IP-Address>
+
+[sonarqube]
+<SonarQube-Private-IP-Address>
+
+[artifact_repository]
+<Artifact_repository-Private-IP-Address>
+```
+**Development Environment Inventory File**
+
+Create an inventory file for the Development environment. This will be used to access Nginx, TODO-webapp and Tooling. The inventory file should look like this:
+
+```
+[tooling]
+<Tooling-Web-Server-Private-IP-Address>
+
+[todo]
+<Todo-Web-Server-Private-IP-Address>
+
+[nginx]
+<Nginx-Private-IP-Address>
+
+[db:vars]
+ansible_user=ec2-user
+ansible_python_interpreter=/usr/bin/python
+
+[db]
+<DB-Server-Private-IP-Address>
+```
+**Pentest Environment Inventory File**
+
+Create an inventory file for the Pentest environment. This will be used to access Nginx, TODO-webapp and Tooling. The inventory file should look like this:
+
+```
+[pentest:children]
+pentest-todo
+pentest-tooling
+
+[pentest-todo]
+<Pentest-for-Todo-Private-IP-Address>
+
+[pentest-tooling]
+<Pentest-for-Tooling-Private-IP-Address>
+```
+**Note**
+
+You will notice that in the pentest inventory file, we have introduced a new concept pentest:children This is because, we want to have a group called pentest which covers Ansible execution against both pentest-todo and pentest-tooling simultaneously. But at the same time, we want the flexibility to run specific Ansible tasks against an individual group. The db group has a slightly different configuration. It uses a RedHat/Centos Linux distro. Others are based on Ubuntu (in this case user is ubuntu). Therefore, the user required for connectivity and path to python interpreter are different. If all your environment is based on Ubuntu, you may not need this kind of set up. Totally up to you how you want to do this. Whatever works for you is absolutely fine in this scenario. This makes us to introduce another Ansible concept called group_vars. With group vars, we can declare and set variables for each group of servers created in the inventory file.
+
+For example, If there are variables we need to be common between both pentest-todo and pentest-tooling, rather than setting these variables in many places, we can simply use the group_vars for pentest. Since in the inventory file it has been created as pentest:children Ansible recognizes this and simply applies that variable to both children.
+
+**Ansible Roles for CI Environment**
+
+Now go ahead and Add two more roles to ansible:
+
+    1. SonarQube
+    2. Artifactory
+
+**Why do we need SonarQube?**
+
+SonarQube is an open-source platform developed by SonarSource for continuous inspection of code quality, it is used to perform automatic reviews with static analysis of code to detect bugs, code smells, and security vulnerabilities. Watch a short description here. There is a lot more hands on work ahead with SonarQube and Jenkins. So, the purpose of SonarQube will be clearer to you very soon.
+
+**Why do we need Artifactory?**
+
+Artifactory is a product by JFrog that serves as a binary repository manager. The binary repository is a natural extension to the source code repository, in that the outcome of your build process is stored. It can be used for certain other automation, but we will it strictly to manage our build artifacts.
+
+**Dependences to be installed**
+
+Install php on todo server
+=====================================
+
+- yum module reset php -y
+- yum module enable php:remi-7.4 -y
+- yum install -y php php-common php-mbstring php-opcache php-intl php-xml php-gd - php-curl php-mysqlnd php-fpm php-json
+- systemctl start php-fpm
+- systemctl enable php-fpm
+
+**Ansible dependencies to install**
+=====================================
+
+- For Mysql Database
+- ansible-galaxy collection install community.mysql
+- For Postgresql Database
+- ansible-galaxy collection install community.postgresql
+
+**Install composer**
+=====================================
+
+- curl -sS https://getcomposer.org/installer | php
+- sudo mv composer.phar /usr/bin/composer
+
+ **Verify Composer is installed or not**
+
+``` composer --version```
+
+**Install phpunit, phploc**
+=====================================
+
+- sudo dnf --enablerepo=remi install php-phpunit-phploc
+- wget -O phpunit https://phar.phpunit.de/phpunit-7.phar
+- chmod +x phpunit
+- sudo yum install php-xdebug
+
+**for database connection**
+
+==================================== 
+
+DB_CONNECTION=mysql DB_PORT=3306
+
+sudo vi /etc/mysql/mysql.conf.d/mysqld.cnf sudo yum install mysql -y
+
+Learn how to install Jenkins [here](https://www.jenkins.io/doc/book/installing/)
+
+Learn how to installk artifactory [here](https://jfrog.com/open-source/)
+
+
+**Configuring Ansible for Jenkins Deployment**
+
+Here you would see a step by step process on how to configure Jenkins and ansible for deployment.
+
+**Requirements:**
+
+- EC2 instance with RedHat Linux distro
+
+- Jenkins installed
+
+- Ansible installed
+
+- Code Repository [Github](https://github.com/manny-uncharted/ansible-config-mgt.git)
+
+- Spin up your EC2 instance with RedHat Linux distro and ensure you install git
+
+```sudo yum install git```
