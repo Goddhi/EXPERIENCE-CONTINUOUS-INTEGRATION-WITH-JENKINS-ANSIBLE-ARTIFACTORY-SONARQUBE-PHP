@@ -810,8 +810,282 @@ stage('Plot Code Coverage Report') {
 
 Result:
 
+![php-loc-result](php-loc.png)
+
+- Bundle the application code for into an artifact (archived package) upload to Artifactory
+
+```
+stage ('Package Artifact') {
+    steps {
+        sh 'zip -qr php-todo.zip ${WORKSPACE}/*'
+    }
+}
+```
+- Publish the resulted artifact into Artifactory
+
+```
+stage ('Upload Artifact to Artifactory') {
+    steps {
+        script { 
+            def server = Artifactory.server 'artifactory-server'                 
+            def uploadSpec = """{
+            "files": [
+                {
+                    "pattern": "php-todo.zip",
+                   "target": "PBL/php-todo",
+                   "props": "type=zip;status=ready"
+
+                }
+            ]
+            }""" 
+
+            server.upload spec: uploadSpec
+        }
+    }
+}
+```
+
+- Deploy the application to the dev environment by launching Ansible pipeline
+
+```
+stage ('Deploy to Dev Environment') {
+    steps {
+        build job: 'ansible-config-mgt/main', parameters: [[$class: 'StringParameterValue', name: 'env', value: 'dev']], propagate: false, wait: true
+    }
+}
+```
+Then push the code to the repository and trigger the build. You should now see a Plot menu item on the left menu. Click on it to see the charts. (The analytics may not mean much to you as it is meant to be read by developers. So, you need not worry much about it – this is just to give you an idea of the real-world implementation). result:
+
+checkout static-assignments/deployment.yml to see further configuration for the artifact 
+
+![artifact-url](artifact-url.png)
 
 
+- To ensure that our deployment shows up on our server.
+- Spin up a new EC2 instance
+- Then configure our playbook to deploy the application to the new EC2 instance
+- Then run the playbook to deploy the application to the new EC2 instance
+- Then access the application on the new EC2 instance result:
 
 
+Note: The build job used in this step tells Jenkins to start another job. In this case it is the ansible-project job, and we are targeting the main branch. Hence, we have ansible-project/main. Since the Ansible project requires parameters to be passed in, we have included this by specifying the parameters section. The name of the parameter is env and its value is dev. Meaning, deploy to the Development environment.
 
+But how are we certain that the code being deployed has the quality that meets corporate and customer requirements? Even though we have implemented Unit Tests and Code Coverage Analysis with phpunit and phploc, we still need to implement Quality Gate to ensure that ONLY code with the required code coverage, and other quality standards make it through to the environments.
+
+To achieve this, we need to configure SonarQube – An open-source platform developed by SonarSource for continuous inspection of code quality to perform automatic reviews with static analysis of code to detect bugs, code smells, and security vulnerabilities.
+
+### SonarQube Installation
+
+Before we start getting hands on with SonarQube configuration, it is incredibly important to understand a few concepts:
+
+Software Quality – The degree to which a software component, system or process meets specified requirements based on user needs and expectations. Software Quality Gates – Quality gates are basically acceptance criteria which are usually presented as a set of predefined quality criteria that a software development project must meet in order to proceed from one stage of its lifecycle to the next one. SonarQube is a tool that can be used to create quality gates for software projects, and the ultimate goal is to be able to ship only quality software code.
+
+Despite that DevOps CI/CD pipeline helps with fast software delivery, it is of the same importance to ensure the quality of such delivery. Hence, we will need SonarQube to set up Quality gates. In this project we will use predefined Quality Gates (also known as The Sonar Way). Software testers and developers would normally work with project leads and architects to create custom quality gates.
+
+- Launch an ubuntu EC2 instance.
+
+- The ansible role required to install SonarQube is available in the code repository/source code repo. To install SonarQube, we will need to run the jenkins pipeline against the ci environment. result:
+
+- Now that sonarqube has been installed properly, ensure you have port 9000 open on the security group. Then navigate to the public IP address of the EC2 instance on port 9000. You should see the SonarQube login page.
+
+```
+http://<public-ip>:9000/sonar
+```
+Result:
+
+![sonarqube-img](sonarqube-img.png)
+
+### CONFIGURE SONARQUBE AND JENKINS FOR QUALITY GATE
+
+- In jenkins, install SonarQube Scanner plugin result:
+
+- Navigate to Manage Jenkins > Configure System > SonarQube servers
+
+- Add the url address of your sonarqube server
+
+```
+http://<public-ip>:9000/sonar
+```
+- Add the token generated by sonarqube (This is not necessary unless anonymous access is disabled) 
+
+Result: 
+
+![sonar-jenkins](sonar-jenkins.png)
+
+- Configure Quality Gate Jenkins Webhook in SonarQube – The URL should point to your Jenkins server http://{JENKINS_HOST}/sonarqube-webhook/ Navigate to Administration > Click on Configuration > Then on Webhooks > and then click on Create 
+
+- Setup SonarQube scanner from Jenkins – Global Tool Configuration Navigate to Manage Jenkins > Global Tool Configuration > SonarQube Scanner
+   - Once you're done click on apply and then save
+
+- Let's proceed to update our Jenkinsfile to include the SonarQube scanner
+
+```
+    stage('SonarQube Quality Gate') {
+        environment {
+            scannerHome = tool 'SonarQubeScanner'
+        }
+        steps {
+            withSonarQubeEnv('sonarqube') {
+                sh "${scannerHome}/bin/sonar-scanner"
+            }
+
+        }
+    }
+
+```
+
+and run the pipeline again 
+
+Result:
+
+![sonar-error](sonar-error.png)
+
+- Due to the error you go from running the pipeline. You need to Configure sonar-scanner.properties. You will need to go into the tools directory on the server to configure the properties file in which SonarQube will require to function during pipeline execution.
+    - ssh into the jenkins server
+    - cd /var/lib/jenkins/tools/hudson.plugins.sonar.SonarRunnerInstallation/SonarQubeScanner/conf/
+
+```
+cd /var/lib/jenkins/tools/hudson.plugins.sonar.SonarRunnerInstallation/SonarQubeScanner/conf/
+```
+- sudo nano sonar-scanner.properties
+```
+sudo nano sonar-scanner.properties
+```
+- Add the following configuration related to php-todo project
+
+```
+sonar.host.url=http://<SonarQube-Server-IP-address>:9000
+sonar.projectKey=php-todo
+#----- Default source code encoding
+sonar.sourceEncoding=UTF-8
+sonar.php.exclusions=**/vendor/**
+sonar.php.coverage.reportPaths=build/logs/clover.xml
+sonar.php.tests.reportPath=build/logs/junit.xml
+```
+- Save and exit
+
+```
+ctrl + x
+```
+Result:
+[sonar-solved](sonar-resolved.png)
+
+- The quality gate we just included has no effect. Why? Well, because if you go to the SonarQube UI, you will realise that we just pushed a poor-quality code onto the development environment.
+
+Navigate to php-todo project in SonarQube
+
+![sonar-pic](sonar-pic.png)
+
+There are bugs, and there is 0.0% code coverage. (code coverage is a percentage of unit tests added by developers to test functions and objects in the code)
+
+If you click on php-todo project for further analysis, you will see that there is 6 hours’ worth of technical debt, code smells and security issues in the code.
+
+In the development environment, this is acceptable as developers will need to keep iterating over their code towards perfection. But as a DevOps engineer working on the pipeline, we must ensure that the quality gate step causes the pipeline to fail if the conditions for quality are not met.
+
+### Conditionally deploy to higher environments
+
+In the real world, developers will work on feature branch in a repository (e.g., GitHub or GitLab). There are other branches that will be used differently to control how software releases are done. You will see such branches as:
+
+- Develop
+- Master or Main (The * is a place holder for a version - - - - number, Jira Ticket name or some description. It can be something like Release-1.0.0)
+- Feature/*
+- Release/*
+- Hotfix/
+
+There is a very wide discussion around release strategy, and git branching strategies which in recent years are considered under what is known as GitFlow. Assuming a basic gitflow implementation restricts only the develop branch to deploy code to Integration environment like sit.
+
+- Let us update our Jenkinsfile to implement this:
+  - First, we will include a When condition to run Quality Gate whenever the running branch is either develop, hotfix, release, main, or master
+  - Then we add a timeout step to wait for SonarQube to complete analysis and successfully finish the pipeline only when code quality is acceptable.
+
+  ```
+  stage('SonarQube Quality Gate') {
+      when { branch pattern: "^develop*|^hotfix*|^release*|^main*", comparator: "REGEXP"}
+        environment {
+            scannerHome = tool 'SonarQubeScanner'
+        }
+        steps {
+            withSonarQubeEnv('sonarqube') {
+                sh "${scannerHome}/bin/sonar-scanner -Dproject.settings=sonar-project.properties"
+            }
+            timeout(time: 1, unit: 'MINUTES') {
+                waitForQualityGate abortPipeline: true
+            }
+        }
+    }
+
+```
+To test, create different branches and push to GitHub. You will realise that only branches other than develop, hotfix, release, main, or master will be able to deploy the code.
+
+If everything goes well, you should be able to see something like this:
+
+Note: You might encounter the error below here's how to fix it:
+
+```
+sudo apt install npm
+php --ini | grep xdebug
+
+```
+edit the configuration file and add the line
+
+```
+sudo nano /etc/php/7.4/cli/conf.d/20-xdebug.ini
+```
+```
+xdebug.mode=coverage
+```
+then restart php-fpm
+
+```
+sudo systemctl restart php7.4-fpm
+```
+
+and rerun the pipeline and you should get this
+
+- Now open sonarqube and you should see the results
+
+![sonar-result](sonar-result.png)
+
+- Introduce Jenkins agents/slaves – Add 2 more servers to be used as Jenkins slave. Configure Jenkins to run its pipeline jobs randomly on any available slave nodes.
+
+- Spin up 2 more servers
+- Install Java on the servers
+- Then open the .bash_profile file and add the following lines
+
+```
+<!-- export JAVA_HOME=$(dirname $(dirname $(readlink $(readlink $(which javac)))))
+export PATH=$PATH:$JAVA_HOME/bin
+export CLASSPATH=.:$JAVA_HOME/jre/lib:$JAVA_HOME/lib:$JAVA_HOME/lib/tools.jar -->
+
+```
+- Then source the file
+
+```
+source ~/.bash_profile
+```
+- Then go to the jenkins dashboard > Manage Jenkins > Manage Nodes and Clouds > New Node
+
+- Add the following details:
+
+- Remote root directory: /home/ubuntu/
+Then save
+
+- When the agents are connected you should see this in the dashboard
+
+![jenkins-slave](jenkins-slave.png)
+
+Note: the goal of jenkins slave is to shed load from the jenkins server to the slave servers
+
+- Now we need to configure webhooks for our repositories in Github to ensure that it monitors the repository for any changes and triggers the pipeline to run automatically.
+
+- Go to the repository in Github and click on settings
+
+- Then click on webhooks
+
+- Then add the url of the jenkins server
+
+### Github webshooks
+
+```
+http://<Jenkins-Server-IP-address>:8080/github-webhook/
+```
