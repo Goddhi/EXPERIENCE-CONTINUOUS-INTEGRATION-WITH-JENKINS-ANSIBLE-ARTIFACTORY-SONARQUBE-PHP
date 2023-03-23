@@ -23,3 +23,5 @@ On the other hand, is Continuous Delivery which ensures that software checked in
 
 ### Continuous Integration in the Real World
 To emphasize a typical CI pipeline further, let us explore the diagram below:
+
+![pipeline-img](pipeline.png)
