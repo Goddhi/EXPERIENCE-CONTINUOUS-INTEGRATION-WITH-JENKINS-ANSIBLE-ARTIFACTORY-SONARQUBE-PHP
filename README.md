@@ -9,7 +9,7 @@ Continuous integration is a software development practice where developers regul
 
 Note: The CI concept is not only about committing our code. There is a general workflow.
 
-## CI Workflow
+### CI Workflow
 The CI workflow is as follows:
 - **Run tests locally:** When you are working on a feature, you should run the tests locally to make sure that your code is working as expected. This is a good practice to follow even if you are not using CI. If you are using CI, you should run the tests locally before you commit your code to the repository. Developers write tests for their code called unit tests, and before they commit their work, they run their tests locally. This practice helps a team to avoid having one developer's work-in-progress code from breaking other developers’ copy of the codebase.
 
